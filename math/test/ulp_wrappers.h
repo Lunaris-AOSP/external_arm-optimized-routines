@@ -24,14 +24,6 @@ static int sincos_mpfr_cos(mpfr_t y, const mpfr_t x, mpfr_rnd_t r) { mpfr_sin(y,
 static int modf_mpfr_frac(mpfr_t f, const mpfr_t x, mpfr_rnd_t r) { MPFR_DECL_INIT(i, 80); return mpfr_modf(i,f,x,r); }
 static int modf_mpfr_int(mpfr_t i, const mpfr_t x, mpfr_rnd_t r) { MPFR_DECL_INIT(f, 80); return mpfr_modf(i,f,x,r); }
 # if MPFR_VERSION < MPFR_VERSION_NUM(4, 2, 0)
-static int mpfr_exp2m1 (mpfr_t ret, const mpfr_t arg, mpfr_rnd_t rnd) {
-  MPFR_DECL_INIT (frd, 1080);
-  MPFR_DECL_INIT (one, 1080);
-  mpfr_set_d(one, 1.0, GMP_RNDN);
-  mpfr_exp2 (frd, arg, GMP_RNDN);
-  return mpfr_sub (ret, frd, one, GMP_RNDN);
-}
-
 static int mpfr_acospi (mpfr_t ret, const mpfr_t arg, mpfr_rnd_t rnd) {
   MPFR_DECL_INIT (frd, 1080);
   MPFR_DECL_INIT (pi, 1080);
@@ -69,6 +61,29 @@ static int mpfr_cospi (mpfr_t ret, const mpfr_t arg, mpfr_rnd_t rnd) {
   mpfr_const_pi (frd, GMP_RNDN);
   mpfr_mul (frd, frd, arg, GMP_RNDN);
   return mpfr_cos (ret, frd, GMP_RNDN);
+}
+
+static int mpfr_exp10m1 (mpfr_t ret, const mpfr_t arg, mpfr_rnd_t rnd) {
+  MPFR_DECL_INIT (frd, 1080);
+  MPFR_DECL_INIT (one, 1080);
+  mpfr_set_d(one, 1.0, GMP_RNDN);
+  mpfr_exp10 (frd, arg, GMP_RNDN);
+  return mpfr_sub (ret, frd, one, GMP_RNDN);
+}
+
+static int mpfr_exp2m1 (mpfr_t ret, const mpfr_t arg, mpfr_rnd_t rnd) {
+  MPFR_DECL_INIT (frd, 1080);
+  MPFR_DECL_INIT (one, 1080);
+  mpfr_set_d(one, 1.0, GMP_RNDN);
+  mpfr_exp2 (frd, arg, GMP_RNDN);
+  return mpfr_sub (ret, frd, one, GMP_RNDN);
+
+static int mpfr_log2p1 (mpfr_t ret, const mpfr_t arg, mpfr_rnd_t rnd) {
+  MPFR_DECL_INIT (m, 1080);
+  MPFR_DECL_INIT (one, 1080);
+  mpfr_set_d(one, 1.0, GMP_RNDN);
+  mpfr_add(m, arg, one, rnd);
+  return mpfr_log2 (ret, m, GMP_RNDN);
 }
 
 static int mpfr_sinpi (mpfr_t ret, const mpfr_t arg, mpfr_rnd_t rnd) {
@@ -184,11 +199,15 @@ ZVNF2_WRAP (atan2pi)
 ZVND2_WRAP (atan2pi)
 ZVNF1_WRAP (cospi)
 ZVND1_WRAP (cospi)
+ZVNF1_WRAP (exp10m1)
+ZVND1_WRAP (exp10m1)
+ZVNF1_WRAP (exp2m1)
+ZVND1_WRAP (exp2m1)
+ZVNF1_WRAP (log2p1)
 ZVNF1_WRAP (sinpi)
 ZVND1_WRAP (sinpi)
 ZVNF1_WRAP (tanpi)
 ZVND1_WRAP (tanpi)
-ZVNF1_WRAP (exp2m1)
 
 double
 v_sincospi_sin (double x)
@@ -329,11 +348,15 @@ ZSVNF2_WRAP (atan2pi)
 ZSVND2_WRAP (atan2pi)
 ZSVNF1_WRAP (cospi)
 ZSVND1_WRAP (cospi)
+ZSVNF1_WRAP (exp10m1)
+ZSVND1_WRAP (exp10m1)
 ZSVNF1_WRAP (exp2m1)
+ZSVND1_WRAP (exp2m1)
 ZSVNF1_WRAP (sinpi)
 ZSVND1_WRAP (sinpi)
 ZSVNF1_WRAP (tanpi)
 ZSVND1_WRAP (tanpi)
+
 double
 sv_sincospi_sin (svbool_t pg, double x)
 {
