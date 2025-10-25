@@ -342,7 +342,7 @@ sv_exp_inline (svbool_t pg, svfloat64_t x, svfloat64_t xtail,
 }
 
 static inline double
-pow_sc (double x, double y)
+pow_specialcase (double x, double y)
 {
   uint64_t ix = asuint64 (x);
   uint64_t iy = asuint64 (y);
@@ -369,6 +369,14 @@ pow_sc (double x, double y)
       return (iy >> 63) ? 1 / x2 : x2;
     }
   return x;
+}
+
+/* Scalar fallback for special case routines with custom signature.  */
+static svfloat64_t NOINLINE
+sv_pow_specialcase (svfloat64_t x1, svfloat64_t x2, svfloat64_t y,
+		    svbool_t cmp)
+{
+  return sv_call2_f64 (pow_specialcase, x1, x2, y, cmp);
 }
 
 svfloat64_t SV_NAME_D2 (pow) (svfloat64_t x, svfloat64_t y, const svbool_t pg)
@@ -433,14 +441,13 @@ svfloat64_t SV_NAME_D2 (pow) (svfloat64_t x, svfloat64_t y, const svbool_t pg)
 
   /* Cases of zero/inf/nan x or y.  */
   if (unlikely (svptest_any (svptrue_b64 (), special)))
-    vz = sv_call2_f64 (pow_sc, x, y, vz, special);
+    vz = sv_pow_specialcase (x, y, vz, special);
 
   return vz;
 }
 
 TEST_SIG (SV, D, 2, pow)
 TEST_ULP (SV_NAME_D2 (pow), 0.55)
-TEST_DISABLE_FENV (SV_NAME_D2 (pow))
 /* Wide intervals spanning the whole domain but shared between x and y.  */
 #define SV_POW_INTERVAL2(xlo, xhi, ylo, yhi, n)                               \
   TEST_INTERVAL2 (SV_NAME_D2 (pow), xlo, xhi, ylo, yhi, n)                    \
