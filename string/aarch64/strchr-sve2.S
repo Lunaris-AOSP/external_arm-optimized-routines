@@ -22,66 +22,84 @@
 #define FUNC  __strchr_aarch64_sve2
 #endif
 
-#define srcin		x0		// const char* src.
 #define chrin		w1		// int chr.
 #define result		x0		// Return.
 
+#define src		x0		// Current data pointer.
 #define	vlalign		x2		// Alignment mask.
-#define	src		x3		// Current data pointer.
-#define	srcincopy	x4		// Copy of src pointer.
+#define	tmp		x3
 
 #define zdata		z0		// Data.
-#define zchr_nul	z1		// chr and null data for search.
-#define zchr		z2		// chr data for search.
+#define zchr_nul	z1		// chr and NUL data for search.
 
 #define pall		p0		// All active predicate.
-#define pchr_nul	p1		// chr and null search result.
+#define pchr_nul	p1		// chr and NUL search result.
 #define pchr		p2		// chr search result.
-#define p1stchunk	p3		// Mask for first chunk.
+#define psrc		p3		// Mask of chars before srcin.
 #define pfirst		p4		// First found.
 
 ENTRY (FUNC)
-	dup	zchr.b, chrin		// Initialize chr data for search.
-	and	chrin, chrin, #0xff	// Set zeros after first byte.
-	dup	zchr_nul.h, chrin	// Initialize chr and null for search.
+	ptrue	pall.b
+	and	chrin, chrin, 0xff	// Set zeros after first byte.
+	dup	zchr_nul.h, chrin	// Initialize chr and NUL for search.
 
-	mov	vlalign, #-1		// Create alignment mask based on VL.
-	incb	vlalign
+	and	tmp, src, 0xfff		// Check for pagecross of 2VL reads.
+	incb	tmp, all, mul #2
+	tbnz	tmp, 12, L(pagecross)
 
-	mov	srcincopy, srcin	// Copy srcin pointer
-	bic	src, srcin, vlalign	// Align src to VL.
-	ptrue	pall.b			// Initialize all active.
-
-	.p2align 4
-L(loop):
-	ld1b	{zdata.b}, pall/z, [src]	// Read	next chunk.
-	match	pchr_nul.b, pall/z, zdata.b, zchr_nul.b	// Find chr or null.
-	b.any	L(loop_end)	// If chr or null are found, move to end.
-L(loop2):
-	ld1b	{zdata.b}, pall/z, [src, #1, mul vl]	// Read	next chunk.
-	incb	src, all, mul #2	// Increment by 2xVL.
-	match	pchr_nul.b, pall/z, zdata.b, zchr_nul.b	// Find chr or null.
-	b.none	L(loop)		// If chr or null are not found, repeat loop.
-
-	decb	src			// Decrement by VL.
-L(loop_end):
-	mov	result, src		// Copy current pointer to result.
+	ld1b	{zdata.b}, pall/z, [src]
+	match	pchr_nul.b, pall/z, zdata.b, zchr_nul.b
+	b.any	L(firstmatch)
+	ld1b	{zdata.b}, pall/z, [src, 1, mul vl]
+	match	pchr_nul.b, pall/z, zdata.b, zchr_nul.b
+	b.none	L(loop_start)
+	incb	src
+L(firstmatch):
 	brkb	pfirst.b, pall/z, pchr_nul.b	// Find first element.
-	incp	result, pfirst.b	// Increment result by element index.
-	cmp	result, srcincopy	// Is result before srcin?
-	b.lo	L(first_chunk)	// If yes, first chunk should be handled.
+	incp	src, pfirst.b			// Increment by element index.
 #if !defined (BUILD_STRCHRNUL)
-	match	pchr.b, pchr_nul/z, zdata.b, zchr.b	// Find only chr.
-	csel	result, result, xzr, first	// If it is not, return null.
-#endif
+	cbz	chrin, 1f			// Special case NUL chrin.
+	cmpne	pchr.b, pchr_nul/z, zdata.b, 0	// Matched chrin?
+	csel	result, src, xzr, first		// If it is NUL, return null.
+1:	ret
+	nop
+#else
 	ret
+#endif
+L(loop_start):
+	mov	vlalign, 0
+	decb	vlalign
+	and	src, src, vlalign		// Align src to VL.
+L(loop):
+	ld1b	{zdata.b}, pall/z, [src, 2, mul vl]
+	incb	src, all, mul #2
+	match	pchr_nul.b, pall/z, zdata.b, zchr_nul.b
+	b.any	L(loop_end)
+L(loop2):
+	ld1b	{zdata.b}, pall/z, [src, 1, mul vl]
+	match	pchr_nul.b, pall/z, zdata.b, zchr_nul.b
+	b.none	L(loop)
+	incb	src
+L(loop_end):
+	brkb	pfirst.b, pall/z, pchr_nul.b	// Find first element.
+	incp	src, pfirst.b			// Increment by element index.
+#if !defined (BUILD_STRCHRNUL)
+	cbz	chrin, 2f			// Special case NUL chrin.
+	cmpne	pchr.b, pchr_nul/z, zdata.b, 0	// Matched chrin?
+	csel	result, src, xzr, first		// If it is NUL, return null.
+#endif
+2:	ret
 
-	.p2align 4
-L(first_chunk):
-	whilelo	p1stchunk.b, src, srcincopy	// Mask for first chunk.
-	// Apply first chunk mask.
-	bics	pchr_nul.b, pall/z, pchr_nul.b, p1stchunk.b
-	b.any	L(loop_end)	// If chr or null are found, move to end.
-	b	L(loop2)	// If not, proceed search in loop
+	.p2align 3
+L(pagecross):
+	mov	vlalign, 0
+	decb	vlalign
+	orn	tmp, src, vlalign		// Find end of VL aligned src.
+	whilels	psrc.b, src, tmp		// Mask off elements.
+	ld1b	{zdata.b}, psrc/z, [src]
+	match	pchr_nul.b, psrc/z, zdata.b, zchr_nul.b
+	b.any	L(firstmatch)
+	and	src, src, vlalign		// Align src to VL.
+	b	L(loop2)
 
 END (FUNC)
